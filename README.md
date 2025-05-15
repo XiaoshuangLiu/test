@@ -156,3 +156,77 @@ plt.tight_layout()
 plt.show()
 
 
+
+import pandas as pd
+from scipy.signal import lfilter
+import matplotlib.pyplot as plt
+
+# ──────────────────────────────────────────────────────────────
+# 0. 基本参数
+impr_cols   = ["TTL_FS_IMPR",
+               "TTL_GROWTH_IMPR",
+               "TTL_ACQ_IMPR",
+               "TTL_Retarget_IMPR"]
+λ           = 0.6               # carry-over rate
+dma_to_plot = None              # 聚合全部 DMA；指定 500 看单 DMA
+# ──────────────────────────────────────────────────────────────
+
+# 1. adstock 函数 (geometric)
+def adstock_geometric(series, lmbda=λ):
+    return lfilter([1.0], [1.0, -lmbda], series.values)
+
+# 2. 生成 adstock 列，并在 **每个 DMA 内 renormalize**
+media = media.sort_values(["DMA_ID", "WEEK_NBR"]).reset_index(drop=True)
+
+for col in impr_cols:
+    ad_name = f"{col}_AD"
+    rn_name = f"{col}_AD_RN"
+
+    # step-A: adstock by DMA
+    media[ad_name] = (
+        media.groupby("DMA_ID", group_keys=False)[col]
+             .apply(lambda s: adstock_geometric(s))
+    )
+
+    # step-B: renormalize inside each DMA
+    def _renorm(g):
+        factor = g[col].sum() / g[ad_name].sum()
+        return g[ad_name] * factor
+
+    media[rn_name] = (
+        media.groupby("DMA_ID", group_keys=False)[[col, ad_name]]
+             .apply(lambda g: _renorm(g))
+             .reset_index(level=0, drop=True)
+    )
+
+# 3. 为绘图准备数据（聚合或单 DMA）
+if dma_to_plot is not None:
+    df_plot = media.loc[media["DMA_ID"] == dma_to_plot].copy()
+    title_suffix = f"(DMA {dma_to_plot})"
+else:
+    agg_cols = (impr_cols +
+                [f"{c}_AD_RN" for c in impr_cols])
+    df_plot = (
+        media.groupby("WEEK_NBR", as_index=False)[agg_cols]
+             .sum()
+    )
+    title_suffix = "(All DMA)"
+
+df_plot = df_plot.sort_values("WEEK_NBR")
+
+# 4. 画 4 行 × 1 列子图：raw vs adstock_renorm
+fig, axes = plt.subplots(nrows=4, ncols=1, figsize=(10, 12), sharex=True)
+
+for ax, col in zip(axes, impr_cols):
+    rn_col = f"{col}_AD_RN"
+    ax.plot(df_plot["WEEK_NBR"], df_plot[col],   label="raw")
+    ax.plot(df_plot["WEEK_NBR"], df_plot[rn_col],label="adstock renorm", linestyle="--")
+    ax.set_title(f"{col} {title_suffix}")
+    ax.set_ylabel("Impressions")
+    ax.legend(loc="upper right")
+
+axes[-1].set_xlabel("Week")
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+
