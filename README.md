@@ -230,3 +230,31 @@ plt.xticks(rotation=45)
 plt.tight_layout()
 plt.show()
 
+
+
+
+
+from scipy.signal import lfilter
+import pandas as pd
+
+def adstock_geometric(series: pd.Series, decay: float = 0.6, normalize: bool = True) -> pd.Series:
+    """
+    Geometric adstock with optional peak normalization.
+    """
+    # 1. 用 lfilter 做高效递归
+    vals = lfilter([1.0], [1.0, -decay], series.values)
+    
+    # 2. 可选的峰值归一化
+    if normalize and vals.max() != 0:
+        vals = vals * (series.max() / vals.max())
+    
+    return pd.Series(vals, index=series.index, name=f"{series.name}_AD")
+
+# groupby 示例
+media = media.sort_values(["DMA_ID","WEEK_NBR"])
+for col in impr_cols:
+    media[f"{col}_AD"] = (
+        media
+        .groupby("DMA_ID", group_keys=False)[col]
+        .apply(lambda s: adstock_geometric(s, decay=0.6, normalize=True))
+    )
