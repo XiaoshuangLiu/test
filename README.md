@@ -86,7 +86,14 @@ else:
         .groupby("WEEK_NBR", as_index=False)[impr_cols + [f"{c}_AD" for c in impr_cols]]
         .sum()
     )
+
+    
     title_suffix = " (All DMA)"
+
+
+
+
+    
 
 # 2. 按列绘图：raw vs. adstock
 for col in impr_cols:
@@ -105,4 +112,47 @@ for col in impr_cols:
     plt.tight_layout()
     plt.show()
     
+
+
+
+import matplotlib.pyplot as plt
+import pandas as pd
+
+# ── parameters you might tweak ─────────────────────────────────
+impr_cols   = ["TTL_FS_IMPR",
+               "TTL_GROWTH_IMPR",
+               "TTL_ACQ_IMPR",
+               "TTL_Retarget_IMPR"]
+dma_to_plot = None          # e.g. 500 → single DMA, None → aggregate
+# ───────────────────────────────────────────────────────────────
+
+# --- build plotting frame -------------------------------------
+if dma_to_plot is not None:
+    df_plot = media.loc[media["DMA_ID"] == dma_to_plot].copy()
+    title_suffix = f"(DMA {dma_to_plot})"
+else:
+    agg_cols   = impr_cols + [f"{c}_AD" for c in impr_cols]
+    df_plot    = (
+        media.groupby("WEEK_NBR", as_index=False)[agg_cols]
+             .sum()
+    )
+    title_suffix = "(All DMA)"
+df_plot = df_plot.sort_values("WEEK_NBR")
+
+# --- create 4-row × 1-col subplot figure ----------------------
+fig, axes = plt.subplots(nrows=4, ncols=1, figsize=(10, 12), sharex=True)
+
+for ax, col in zip(axes, impr_cols):
+    ad_col = f"{col}_AD"
+    ax.plot(df_plot["WEEK_NBR"], df_plot[col],      label="raw")
+    ax.plot(df_plot["WEEK_NBR"], df_plot[ad_col],   label="adstock", linestyle="--")
+    ax.set_title(f"{col} {title_suffix}")
+    ax.set_ylabel("Impressions")
+    ax.legend(loc="upper right")
+
+axes[-1].set_xlabel("Week")
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+
 
